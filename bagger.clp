@@ -35,7 +35,7 @@
 =>
 	(assert (current-size (+ ?bagSize 1)))
 	(retract ?currentSize)
-	(assert (In-bag ?bagName ?item))
+	(assert (In-bag ?bagName ?item ?freezeBag))
 	(retract ?itemToBeBagged)
 	(retract ?currentContent)
 	(assert (current-content large)))
@@ -50,7 +50,7 @@
 =>
 	(assert (current-size (+ ?bagSize 1)))
 	(retract ?currentSize)
-	(assert (In-bag ?bagName ?item))
+	(assert (In-bag ?bagName ?item ?freezeBag))
 	(retract ?itemToBeBagged)
 	(retract ?currentContent)
 	(assert (current-content large)))
@@ -93,7 +93,7 @@
 =>
 	(assert (current-size (+ ?bagSize 1)))
 	(retract ?currentSize)
-	(assert (In-bag ?bagName ?item))
+	(assert (In-bag ?bagName ?item ?freezeBag))
 	(retract ?itemToBeBagged)
 	(retract ?currentContent)
 	(assert (current-content medium)))
@@ -130,7 +130,7 @@
 =>
 	(assert (current-size (+ ?bagSize 1)))
 	(retract ?currentSize)
-	(assert (In-bag ?bagName ?item))
+	(assert (In-bag ?bagName ?item ?freezeBag))
 	(retract ?itemToBeBagged)
 	(retract ?currentContent)
 	(assert (current-content small)))
@@ -153,4 +153,19 @@
 	(Step bag-small-items)
 =>
 	(retract (Step bag-small-items))
-	(assert (Step done)))
+	(assert (Step done))
+	(printout t "Step is done" crlf))
+
+(defrule B14
+	(Step done)
+	?baggedItem <- (In-bag ?bagName ?item yes-freezer-bag)
+=>
+	(printout t "Bag" ?bagName " contains " ?item " (in freezer bag)" crlf)
+	(retract ?baggedItem))
+
+(defrule B15
+	(Step done)
+	?baggedItem <- (In-bag ?bagName ?item ?freezeBag)
+=>
+	(printout t "Bag" ?bagName " contains " ?item crlf)
+	(retract ?baggedItem))
