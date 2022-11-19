@@ -1,171 +1,143 @@
 ; bagger.clp
-(deffacts items
-	(Step Check-order)
-	(Is-bag 1)
-	(To-be-bagged Bread plastic-bag medium no-freeze no-freezer-bag)
-	(To-be-bagged Glop jar small no-freeze no-freezer-bag)
-	(To-be-bagged Granola cardboard-box large no-freeze no-freezer-bag)
-	(To-be-bagged Ice-cream cardboard-carton medium yes-freeze no-freezer-bag)
-	(To-be-bagged Potato-chips plastic-bag medium no-freeze no-freezer-bag)
-	(To-be-bagged Pepsi bottle large no-freeze no-freezer-bag)
-	(current-size 0)
-	(current-content empty))
+(deftemplate Bag 
+    (slot number) 
+    (slot size) 
+    (multislot items))
 
-(defrule B1
-	(Step Check-order)
-	(To-be-bagged Potato-chips ?container ?size ?freeze ?freezeBag)
-	(not (To-be-bagged Pepsi ?container ?size ?freeze ?freezeBag))
-=>
-	(printout t "Execute B1" crlf)
-	(assert (To-be-bagged Pepsi bottle large no-freeze no-freezer-bag)))
+(deftemplate Item 
+    (slot name) 
+    (slot container) 
+    (slot size) 
+    (slot frozen?)) 
+
+(deffacts baggerFacts
+	(Step check-order)
+	(Bag (number 1) (size empty) (items))
+	(Current-bag 1)
+	(Item (name Bread) (container plastic-bag) (size medium) (frozen? no)) 
+    (Item (name Glop) (container jar) (size small) (frozen? no)) 
+    (Item (name Granola) (container cardboard-box) (size large) (frozen? no)) 
+    (Item (name Ice-cream) (container cardboard-carton) (size medium) (frozen? yes))
+    (Item (name Potato-chips) (container plastic-bag) (size medium) (frozen? no))
+    (Item (name Pepsi) (container bottle) (size large) (frozen? no)))
+
+(defrule B0 
+    (declare (salience 10)) 
+  	=> 
+    (set-strategy complexity))
+
+(defrule B1 
+    (Step check-order) 
+    (Item (name Ice-cream)) 
+    (not (Item (name Pepsi))) 
+  	=> 
+    (println "I see you are buying potato chips. Would you like a Pepsi to go with them?") 
+    (bind ?ans (upcase (sub-string 1 1 (read)))) 
+    (if (eq ?ans "Y") 
+		then 
+		(assert (Item (name Pepsi) (container bottle) (size large) (frozen? no))))) 
 
 (defrule B2
-	(Step Check-order)
-=>
-	(retract 0)
-	(Step bag-large-items))
+	?Step <- (Step check-order)
+	=>
+	(retract ?Step)
+	(assert (Step bag-large-items)))
 
-(defrule B3
-	(Step bag-large-items)
-	(Is-bag ?bagName)
-	?itemToBeBagged <- (To-be-bagged ?item bottle large ?freeze ?freezeBag)
-	?currentSize <- (current-size ?bagSize)
-	(< ?bagSize 6)
-	?currentContent <- (current-content ?content)
-=>
-	(assert (current-size (+ ?bagSize 1)))
-	(retract ?currentSize)
-	(assert (In-bag ?bagName ?item ?freezeBag))
-	(retract ?itemToBeBagged)
-	(retract ?currentContent)
-	(assert (current-content large)))
-
-(defrule B4
-	(Step bag-large-items)
-	(Is-bag ?bagName)
-	?itemToBeBagged <- (To-be-bagged ?item ?container large ?freeze ?freezeBag)
-	?currentSize <- (current-size ?bagSize)
-	(< ?bagSize 6)
-	?currentContent <- (current-content ?content)
-=>
-	(assert (current-size (+ ?bagSize 1)))
-	(retract ?currentSize)
-	(assert (In-bag ?bagName ?item ?freezeBag))
-	(retract ?itemToBeBagged)
-	(retract ?currentContent)
-	(assert (current-content large)))
-
-(defrule B5
-	(Step bag-large-items)
-	?currentBag <- (Is-bag ?bagName)
-	(To-be-bagged ?item ?container large ?freeze ?freezeBag)
-	?currentSize <- (current-size ?bagSize)
-	?currentContent <- (current-content ?content)
-=>
-	(assert (Is-bag (+ ?bagName 1)))
-	(retract ?currentSize)
-	(assert (current-size 0))
-	(retract ?currentBag)
-	(retract ?currentContent)
-	(assert (current-content empty)))
+(defrule B3 
+    (Step bag-large-items) 
+    ?item <- (Item (container bottle) (size large)) 
+    (Current-bag ?bagNumber) 
+    ?bag <- (Bag (number ?bagNumber) (size empty|large) 
+                 (items $?items&:(< (length$ $?items) 6))) 
+  	=> 
+    (modify ?bag (size large) 
+            	 (items (insert$ $?items 1 (fact-slot-value ?item name)))) 
+    (retract ?item)) 
+ 
+(defrule B4 
+    (Step bag-large-items) 
+    ?item <- (Item (size large)) 
+    (Current-bag ?bagNumber) 
+    ?bag <- (Bag (number ?bagNumber) (size empty|large) 
+            	 (items $?items&:(< (length$ $?items) 6))) 
+  	=> 
+    (modify ?bag (size large) 
+            	 (items (insert$ $?items 1 (fact-slot-value ?item name)))) 
+    (retract ?item)) 
+ 
+(defrule B5 
+    (Step bag-large-items) 
+    (Item (size large)) 
+    ?currentBag <- (Current-bag ?currentBagNumber) 
+  	=> 
+    (bind ?bagNumber (+ ?currentBagNumber 1)) 
+    (assert (Bag (number ?bagNumber) (size empty) (items))) 
+    (retract ?currentBag) 
+    (assert (Current-bag ?bagNumber))) 
 
 (defrule B6
-	(Step bag-large-items)
-=>
-	(retract (Step bag-large-items))
+	?Step <- (Step bag-large-items)
+	=>
+	(retract ?Step)
 	(assert (Step bag-medium-items)))
 
-(defrule B7
-	(Step bag-medium-items)
-	?frozen <- (To-be-bagged ?item ?container medium yes-freeze no-freezer-bag)
-=>
-	(assert (To-be-bagged ?item ?container medium yes-freeze yes-freezer-bag))
-	(retract ?frozen))
+(defrule B7 
+    (Step bag-medium-items) 
+    ?item <- (Item (size medium) (container ~freezer-bag) (frozen? yes)) 
+  => 
+    (modify ?item (container freezer-bag)))
 
-(defrule B8
-	(Step bag-medium-items)
-	(Is-bag ?bagName)
-	?itemToBeBagged <- (To-be-bagged ?item ?container medium ?freeze ?freezeBag)
-	(not (current-content large))
-	?currentSize <- (current-size ?bagSize)
-	(< ?bagSize 12)
-	?currentContent <- (current-content ?content)
-=>
-	(assert (current-size (+ ?bagSize 1)))
-	(retract ?currentSize)
-	(assert (In-bag ?bagName ?item ?freezeBag))
-	(retract ?itemToBeBagged)
-	(retract ?currentContent)
-	(assert (current-content medium)))
+(defrule B8 
+    (Step bag-medium-items) 
+    ?item <- (Item (size medium)) 
+    (Current-bag ?bagNumber) 
+    ?bag <- (Bag (number ?bagNumber) (size empty|medium) 
+            	 (items $?items&:(< (length$ $?items) 12))) 
+  	=> 
+    (modify ?bag (size medium) 
+            	 (items (insert$ $?items 1 (fact-slot-value ?item name)))) 
+    (retract ?item)) 
 
 (defrule B9
-	(Step bag-medium-items)
-	?currentBag <- (Is-bag ?bagName)
-	(To-be-bagged ?item ?container medium ?freeze ?freezeBag)
-	?currentSize <- (current-size ?bagSize)
-	?currentContent <- (current-content ?content)
-=> 
-	(assert (Is-bag (+ ?bagName 1)))
-	(retract ?currentSize)
-	(assert (current-size 0))
-	(retract ?currentBag)
-	(retract ?currentContent)
-	(assert (current-content empty)))
+    (Step bag-medium-items) 
+    (Item (size medium)) 
+    ?currentBag <- (Current-bag ?currentBagNumber) 
+  	=> 
+    (bind ?bagNumber (+ ?currentBagNumber 1)) 
+    (assert (Bag (number ?bagNumber) (size empty) (items))) 
+    (retract ?currentBag) 
+    (assert (Current-bag ?bagNumber))) 
 
 (defrule B10
-	(Step bag-medium-items)
-=>
-	(retract (Step bag-medium-items))
+	?Step <- (Step bag-medium-items)
+	=>
+	(retract ?Step)
 	(assert (Step bag-small-items)))
 
 (defrule B11
-	(Step bag-small-items)
-	(Is-bag ?bagName)
-	?itemToBeBagged <- (To-be-bagged ?item ?container small ?freeze ?freezeBag)
-	(not (current-content large))
-	(not (current-content medium))
-	?currentSize <- (current-size ?bagSize)
-	(< ?bagSize 18)
-	?currentContent <- (current-content ?content)
-=>
-	(assert (current-size (+ ?bagSize 1)))
-	(retract ?currentSize)
-	(assert (In-bag ?bagName ?item ?freezeBag))
-	(retract ?itemToBeBagged)
-	(retract ?currentContent)
-	(assert (current-content small)))
+    (Step bag-small-items) 
+    ?item <- (Item (size small)) 
+    (Current-bag ?bagNumber) 
+    ?bag <- (Bag (number ?bagNumber) (size empty|small) 
+            	 (items $?items&:(< (length$ $?items) 18))) 
+  	=> 
+    (modify ?bag (size small) 
+            	 (items (insert$ $?items 1 (fact-slot-value ?item name)))) 
+    (retract ?item)) 
 
 (defrule B12
-	(Step bag-small-items)
-	(Is-bag ?bagName)
-	(To-be-bagged ?item ?container small ?freeze ?freezeBag)
-	?currentSize <- (current-size ?bagSize)
-	?currentContent <- (current-content ?content)
-=>
-	(assert (Is-bag (+ ?bagName 1)))
-	(retract ?currentSize)
-	(assert (current-size 0))
-	(retract ?currentBag)
-	(retract ?currentContent)
-	(assert (current-content empty)))
+    (Step bag-small-items) 
+    (Item (size small)) 
+    ?currentBag <- (Current-bag ?currentBagNumber) 
+  	=> 
+    (bind ?bagNumber (+ ?currentBagNumber 1)) 
+    (assert (Bag (number ?bagNumber) (size empty) (items))) 
+    (retract ?currentBag) 
+    (assert (Current-bag ?bagNumber))) 
 
 (defrule B13
-	(Step bag-small-items)
-=>
-	(retract (Step bag-small-items))
+	?Step <- (Step bag-small-items)
+	=>
+	(retract ?Step)
 	(assert (Step done))
 	(printout t "Step is done" crlf))
-
-(defrule B14
-	(Step done)
-	?baggedItem <- (In-bag ?bagName ?item yes-freezer-bag)
-=>
-	(printout t "Bag" ?bagName " contains " ?item " (in freezer bag)" crlf)
-	(retract ?baggedItem))
-
-(defrule B15
-	(Step done)
-	?baggedItem <- (In-bag ?bagName ?item ?freezeBag)
-=>
-	(printout t "Bag" ?bagName " contains " ?item crlf)
-	(retract ?baggedItem))
